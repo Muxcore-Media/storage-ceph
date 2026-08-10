@@ -1,0 +1,16 @@
+{
+  "name": "Storage Ceph",
+  "description": "Ceph/Rook RGW-backed StorageProvider with SettingsProvider",
+  "version": "0.1.0",
+  "author": "MuxCore",
+  "roles": ["storage", "infrastructure"],
+  "capabilities": ["storage", "storage.ceph", "settings"],
+  "contracts": [
+    {
+      "repo": "github.com/Muxcore-Media/core/pkg/contracts",
+      "interface": "StorageProvider",
+      "version": "v0.5.4"
+    }
+  ],
+  "minCoreVersion": "0.5.4"
+}
