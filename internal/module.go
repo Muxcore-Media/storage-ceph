@@ -19,9 +19,9 @@ import (
 	"github.com/Muxcore-Media/storage-ceph/internal/store"
 )
 
-// Module is a Ceph/Rook storage provider scaffold.
-// v0.1.0 talks to Ceph RGW (S3-compatible). Native librados/CephFS is a follow-up
-// (blocked on CGO_ENABLED=0 for official builds).
+// Module is a Ceph RGW (S3-compatible) storage provider.
+// Laptop path: point CEPH_RGW_* at MinIO (see README / deploy/docker-compose.yml).
+// Native librados/CephFS is deferred (CGO); monitors/pool/user/keyring settings are reserved.
 type Module struct {
 	id       string
 	grpcAddr string

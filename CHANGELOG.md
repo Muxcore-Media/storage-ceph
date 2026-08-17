@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Document MinIO as the laptop RGW stand-in; native RADOS/CephFS explicitly deferred
+- Optional MinIO Docker CRUD smoke (`TestMinIO_PutGetListDelete`); skips without Docker
+- `deploy/docker-compose.yml` MinIO fixture for local RGW-compatible testing
+
 ## [0.1.0] — 2026-08-10
 
 ### Added
