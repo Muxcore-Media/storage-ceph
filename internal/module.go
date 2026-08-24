@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -21,34 +22,32 @@ import (
 
 // Module is a Ceph storage provider (RGW, CephFS mount, or native RADOS with -tags ceph).
 // Laptop path: point CEPH_RGW_* at MinIO (see README / deploy/docker-compose.yml).
-type Module struct {
-	id       string
-	grpcAddr string
-	httpAddr string
-
-	cfgMu      sync.RWMutex
-	backend    string
-	cephfsRoot string
-	monitors   string
-	pool       string
-	user       string
-	keyring    string
+type Module struct { //nolint:govet // fieldalignment: lifecycle fields grouped for readability
+	id          string
+	grpcAddr    string
+	httpAddr    string
+	backend     string
+	cephfsRoot  string
+	monitors    string
+	pool        string
+	user        string
+	keyring     string
 	rgwEndpoint string
-	bucket     string
-	accessKey  string
-	secretKey  string
-	prefix     string
-	useSSL     bool
-	pathStyle  bool
-
-	store   store.Backend
-	srv     *server.Server
-	grpcSrv *grpc.Server
-	lis     net.Listener
-	httpSrv *http.Server
+	bucket      string
+	accessKey   string
+	secretKey   string
+	prefix      string
+	cfgMu       sync.RWMutex
+	store       store.Backend
+	srv         *server.Server
+	grpcSrv     *grpc.Server
+	lis         net.Listener
+	httpSrv     *http.Server
+	useSSL      bool
+	pathStyle   bool
 }
 
-type Config struct {
+type Config struct { //nolint:govet // fieldalignment: config fields grouped for readability
 	ID          string
 	Backend     string
 	CephFSRoot  string
@@ -157,12 +156,12 @@ func NewModule(cfg Config) *Module {
 
 func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
-		ID:          m.id,
-		Name:        "Storage Ceph",
-		Version:     "0.1.0",
-		Roles:       []string{"storage", "infrastructure"},
-		Description: "Ceph/Rook RGW-backed StorageProvider (Put/Get/Delete/List/Stream)",
-		Author:      "MuxCore",
+		ID:           m.id,
+		Name:         "Storage Ceph",
+		Version:      "0.1.0",
+		Roles:        []string{"storage", "infrastructure"},
+		Description:  "Ceph/Rook RGW-backed StorageProvider (Put/Get/Delete/List/Stream)",
+		Author:       "MuxCore",
 		Capabilities: []string{"storage", "storage.ceph", "settings"},
 		Contracts: []contracts.ContractDeclaration{
 			{Repo: "github.com/Muxcore-Media/core/pkg/contracts", Interface: "StorageProvider", Version: "v0.5.4"},
@@ -198,12 +197,13 @@ func (m *Module) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := st.EnsureBucket(ctx); err != nil {
-		slog.Warn("storage-ceph: ensure bucket failed (will retry on use)", "error", err)
+	if ensureErr := st.EnsureBucket(ctx); ensureErr != nil {
+		slog.Warn("storage-ceph: ensure bucket failed (will retry on use)", "error", ensureErr)
 	}
 	m.store = st
 
-	lis, err := net.Listen("tcp", m.grpcAddr)
+	var lc net.ListenConfig
+	lis, err := lc.Listen(ctx, "tcp", m.grpcAddr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", m.grpcAddr, err)
 	}
@@ -218,7 +218,11 @@ func (m *Module) Init(ctx context.Context) error {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
-	m.httpSrv = &http.Server{Addr: m.httpAddr, Handler: mux}
+	m.httpSrv = &http.Server{
+		Addr:              m.httpAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	slog.Info("storage-ceph initialized",
 		"backend", m.backendOrDefault(), "rgw", m.rgwEndpoint, "bucket", m.bucket, "pool", m.pool,
