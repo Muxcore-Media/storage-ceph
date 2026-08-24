@@ -6,15 +6,16 @@ import (
 
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
-	"github.com/Muxcore-Media/storage-ceph/internal/store"
 )
 
 func (m *Module) Settings() []contracts.SettingDef {
 	m.cfgMu.RLock()
 	defer m.cfgMu.RUnlock()
 	return []contracts.SettingDef{
+		{Key: "storage_backend", Label: "Storage Backend", Type: contracts.SettingTypeString, Value: m.backendOrDefault(), Default: "rgw", Description: "rgw, cephfs, or rados; CEPH_STORAGE_BACKEND", Group: "Ceph"},
+		{Key: "cephfs_root", Label: "CephFS Mount Root", Type: contracts.SettingTypeString, Value: m.cephfsRoot, Description: "Mounted CephFS path when backend=cephfs; CEPH_CEPHFS_ROOT", Group: "Ceph"},
 		{Key: "monitors", Label: "Ceph Monitors", Type: contracts.SettingTypeString, Value: m.monitors, Description: "Comma-separated mon endpoints (Rook/docs); CEPH_MONITORS", Group: "Ceph"},
-		{Key: "pool", Label: "RADOS Pool", Type: contracts.SettingTypeString, Value: m.pool, Default: "muxcore", Description: "Target pool for future native RADOS; CEPH_POOL", Group: "Ceph"},
+		{Key: "pool", Label: "RADOS Pool", Type: contracts.SettingTypeString, Value: m.pool, Default: "muxcore", Description: "RADOS pool when backend=rados; CEPH_POOL", Group: "Ceph"},
 		{Key: "user", Label: "Ceph User", Type: contracts.SettingTypeString, Value: m.user, Default: "client.muxcore", Description: "CEPH_USER", Group: "Ceph"},
 		{Key: "keyring", Label: "Keyring Path", Type: contracts.SettingTypeSecret, Value: modulesdk.MaskSecret(m.keyring), Description: "Path or key material; CEPH_KEYRING", Group: "Ceph"},
 		{Key: "rgw_endpoint", Label: "RGW Endpoint", Type: contracts.SettingTypeString, Value: m.rgwEndpoint, Default: "127.0.0.1:7480", Description: "Ceph Object Gateway host:port; CEPH_RGW_ENDPOINT", Group: "RGW"},
@@ -33,18 +34,28 @@ func (m *Module) UpdateSetting(key, value string) error {
 	defer m.cfgMu.Unlock()
 
 	switch key {
+	case "storage_backend", "CEPH_STORAGE_BACKEND":
+		v := strings.ToLower(value)
+		if v != "" && v != "rgw" && v != "s3" && v != "cephfs" && v != "fs" && v != "rados" {
+			return fmt.Errorf("storage_backend must be rgw, cephfs, or rados")
+		}
+		if v != "" {
+			m.backend = v
+		}
+	case "cephfs_root", "CEPH_CEPHFS_ROOT":
+		if value == "" {
+			return fmt.Errorf("cephfs_root must not be empty when set")
+		}
+		m.cephfsRoot = value
 	case "monitors", "CEPH_MONITORS":
 		m.monitors = value
-		return nil
 	case "pool", "CEPH_POOL":
 		if value == "" {
 			return fmt.Errorf("pool must not be empty")
 		}
 		m.pool = value
-		return nil
 	case "user", "CEPH_USER":
 		m.user = value
-		return nil
 	case "keyring", "CEPH_KEYRING":
 		if value == "********" {
 			return nil
@@ -92,15 +103,7 @@ func (m *Module) UpdateSetting(key, value string) error {
 	if m.store == nil {
 		return nil
 	}
-	st, err := store.New(store.Config{
-		Endpoint:  m.rgwEndpoint,
-		Bucket:    m.bucket,
-		AccessKey: m.accessKey,
-		SecretKey: m.secretKey,
-		Prefix:    m.prefix,
-		UseSSL:    m.useSSL,
-		PathStyle: m.pathStyle,
-	})
+	st, err := m.buildStore()
 	if err != nil {
 		return err
 	}

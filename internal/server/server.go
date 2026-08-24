@@ -16,30 +16,30 @@ import (
 	"github.com/Muxcore-Media/storage-ceph/internal/store"
 )
 
-// Server exposes StorageService backed by a Ceph RGW Store.
+// Server exposes StorageService backed by a Ceph storage backend.
 type Server struct {
 	storagev1.UnimplementedStorageServiceServer
 	mu    sync.RWMutex
-	store *store.Store
+	store store.Backend
 }
 
-func New(st *store.Store) *Server {
+func New(st store.Backend) *Server {
 	return &Server{store: st}
 }
 
-func Register(gs *grpc.Server, st *store.Store) *Server {
+func Register(gs *grpc.Server, st store.Backend) *Server {
 	s := New(st)
 	storagev1.RegisterStorageServiceServer(gs, s)
 	return s
 }
 
-func (s *Server) ReplaceStore(st *store.Store) {
+func (s *Server) ReplaceStore(st store.Backend) {
 	s.mu.Lock()
 	s.store = st
 	s.mu.Unlock()
 }
 
-func (s *Server) getStore() *store.Store {
+func (s *Server) getStore() store.Backend {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.store

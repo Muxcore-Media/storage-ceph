@@ -19,15 +19,16 @@ import (
 	"github.com/Muxcore-Media/storage-ceph/internal/store"
 )
 
-// Module is a Ceph RGW (S3-compatible) storage provider.
+// Module is a Ceph storage provider (RGW, CephFS mount, or native RADOS with -tags ceph).
 // Laptop path: point CEPH_RGW_* at MinIO (see README / deploy/docker-compose.yml).
-// Native librados/CephFS is deferred (CGO); monitors/pool/user/keyring settings are reserved.
 type Module struct {
 	id       string
 	grpcAddr string
 	httpAddr string
 
 	cfgMu      sync.RWMutex
+	backend    string
+	cephfsRoot string
 	monitors   string
 	pool       string
 	user       string
@@ -40,7 +41,7 @@ type Module struct {
 	useSSL     bool
 	pathStyle  bool
 
-	store   *store.Store
+	store   store.Backend
 	srv     *server.Server
 	grpcSrv *grpc.Server
 	lis     net.Listener
@@ -49,6 +50,8 @@ type Module struct {
 
 type Config struct {
 	ID          string
+	Backend     string
+	CephFSRoot  string
 	Monitors    string
 	Pool        string
 	User        string
@@ -87,6 +90,12 @@ func NewModule(cfg Config) *Module {
 		cfg.HTTPAddr = ":9681"
 	}
 	cfg.PathStyle = true
+	if v := os.Getenv("CEPH_STORAGE_BACKEND"); v != "" {
+		cfg.Backend = v
+	}
+	if v := os.Getenv("CEPH_CEPHFS_ROOT"); v != "" {
+		cfg.CephFSRoot = v
+	}
 	if v := os.Getenv("CEPH_MONITORS"); v != "" {
 		cfg.Monitors = v
 	}
@@ -128,6 +137,8 @@ func NewModule(cfg Config) *Module {
 	}
 	return &Module{
 		id:          cfg.ID,
+		backend:     cfg.Backend,
+		cephfsRoot:  cfg.CephFSRoot,
 		monitors:    cfg.Monitors,
 		pool:        cfg.Pool,
 		user:        cfg.User,
@@ -161,22 +172,29 @@ func (m *Module) Info() contracts.ModuleInfo {
 	}
 }
 
-func (m *Module) storeConfig() store.Config {
-	m.cfgMu.RLock()
-	defer m.cfgMu.RUnlock()
-	return store.Config{
-		Endpoint:  m.rgwEndpoint,
-		Bucket:    m.bucket,
-		AccessKey: m.accessKey,
-		SecretKey: m.secretKey,
-		Prefix:    m.prefix,
-		UseSSL:    m.useSSL,
-		PathStyle: m.pathStyle,
-	}
+func (m *Module) buildStore() (store.Backend, error) {
+	return store.Open(store.ModuleConfig{
+		Backend:    m.backend,
+		Monitors:   m.monitors,
+		Pool:       m.pool,
+		User:       m.user,
+		Keyring:    m.keyring,
+		CephFSRoot: m.cephfsRoot,
+		Prefix:     m.prefix,
+		RGW: store.Config{
+			Endpoint:  m.rgwEndpoint,
+			Bucket:    m.bucket,
+			AccessKey: m.accessKey,
+			SecretKey: m.secretKey,
+			Prefix:    m.prefix,
+			UseSSL:    m.useSSL,
+			PathStyle: m.pathStyle,
+		},
+	})
 }
 
 func (m *Module) Init(ctx context.Context) error {
-	st, err := store.New(m.storeConfig())
+	st, err := m.buildStore()
 	if err != nil {
 		return err
 	}
@@ -203,8 +221,8 @@ func (m *Module) Init(ctx context.Context) error {
 	m.httpSrv = &http.Server{Addr: m.httpAddr, Handler: mux}
 
 	slog.Info("storage-ceph initialized",
-		"rgw", m.rgwEndpoint, "bucket", m.bucket, "pool", m.pool,
-		"grpc", m.grpcAddr, "http", m.httpAddr)
+		"backend", m.backendOrDefault(), "rgw", m.rgwEndpoint, "bucket", m.bucket, "pool", m.pool,
+		"cephfs", m.cephfsRoot, "grpc", m.grpcAddr, "http", m.httpAddr)
 	return nil
 }
 
@@ -244,6 +262,13 @@ func (m *Module) Health(ctx context.Context) error {
 		return fmt.Errorf("not initialized")
 	}
 	return m.store.Health(ctx)
+}
+
+func (m *Module) backendOrDefault() string {
+	if strings.TrimSpace(m.backend) == "" {
+		return "rgw"
+	}
+	return m.backend
 }
 
 func parseBool(v string) (bool, error) {
