@@ -33,73 +33,9 @@ func (m *Module) UpdateSetting(key, value string) error {
 	m.cfgMu.Lock()
 	defer m.cfgMu.Unlock()
 
-	switch key {
-	case "storage_backend", "CEPH_STORAGE_BACKEND":
-		v := strings.ToLower(value)
-		if v != "" && v != "rgw" && v != "s3" && v != "cephfs" && v != "fs" && v != "rados" {
-			return fmt.Errorf("storage_backend must be rgw, cephfs, or rados")
-		}
-		if v != "" {
-			m.backend = v
-		}
-	case "cephfs_root", "CEPH_CEPHFS_ROOT":
-		if value == "" {
-			return fmt.Errorf("cephfs_root must not be empty when set")
-		}
-		m.cephfsRoot = value
-	case "monitors", "CEPH_MONITORS":
-		m.monitors = value
-	case "pool", "CEPH_POOL":
-		if value == "" {
-			return fmt.Errorf("pool must not be empty")
-		}
-		m.pool = value
-	case "user", "CEPH_USER":
-		m.user = value
-	case "keyring", "CEPH_KEYRING":
-		if value == "********" {
-			return nil
-		}
-		m.keyring = value
-		return nil
-	case "rgw_endpoint", "CEPH_RGW_ENDPOINT":
-		if value == "" {
-			return fmt.Errorf("rgw_endpoint must not be empty")
-		}
-		m.rgwEndpoint = value
-	case "bucket", "CEPH_BUCKET":
-		if value == "" {
-			return fmt.Errorf("bucket must not be empty")
-		}
-		m.bucket = value
-	case "access_key", "CEPH_ACCESS_KEY":
-		if value == "********" {
-			return nil
-		}
-		m.accessKey = value
-	case "secret_key", "CEPH_SECRET_KEY":
-		if value == "********" {
-			return nil
-		}
-		m.secretKey = value
-	case "prefix", "CEPH_PREFIX":
-		m.prefix = value
-	case "use_ssl", "CEPH_USE_SSL":
-		b, err := parseBool(value)
-		if err != nil {
-			return err
-		}
-		m.useSSL = b
-	case "path_style", "CEPH_PATH_STYLE":
-		b, err := parseBool(value)
-		if err != nil {
-			return err
-		}
-		m.pathStyle = b
-	default:
-		return fmt.Errorf("unknown setting %q", key)
+	if err := m.applySettingLocked(key, value); err != nil {
+		return err
 	}
-
 	if m.store == nil {
 		return nil
 	}
@@ -111,5 +47,108 @@ func (m *Module) UpdateSetting(key, value string) error {
 	if m.srv != nil {
 		m.srv.ReplaceStore(st)
 	}
+	return nil
+}
+
+func (m *Module) applySettingLocked(key, value string) error {
+	switch key {
+	case "storage_backend", "CEPH_STORAGE_BACKEND":
+		return m.setStorageBackend(value)
+	case "cephfs_root", "CEPH_CEPHFS_ROOT":
+		return m.setCephFSRoot(value)
+	case "monitors", "CEPH_MONITORS":
+		m.monitors = value
+	case "pool", "CEPH_POOL":
+		return m.setPool(value)
+	case "user", "CEPH_USER":
+		m.user = value
+	case "keyring", "CEPH_KEYRING":
+		return m.setSecret(&m.keyring, value)
+	case "rgw_endpoint", "CEPH_RGW_ENDPOINT":
+		return m.setRGWEndpoint(value)
+	case "bucket", "CEPH_BUCKET":
+		return m.setBucket(value)
+	case "access_key", "CEPH_ACCESS_KEY":
+		return m.setSecret(&m.accessKey, value)
+	case "secret_key", "CEPH_SECRET_KEY":
+		return m.setSecret(&m.secretKey, value)
+	case "prefix", "CEPH_PREFIX":
+		m.prefix = value
+	case "use_ssl", "CEPH_USE_SSL":
+		return m.setUseSSL(value)
+	case "path_style", "CEPH_PATH_STYLE":
+		return m.setPathStyle(value)
+	default:
+		return fmt.Errorf("unknown setting %q", key)
+	}
+	return nil
+}
+
+func (m *Module) setStorageBackend(value string) error {
+	v := strings.ToLower(value)
+	if v != "" && v != "rgw" && v != "s3" && v != "cephfs" && v != "fs" && v != "rados" {
+		return fmt.Errorf("storage_backend must be rgw, cephfs, or rados")
+	}
+	if v != "" {
+		m.backend = v
+	}
+	return nil
+}
+
+func (m *Module) setCephFSRoot(value string) error {
+	if value == "" {
+		return fmt.Errorf("cephfs_root must not be empty when set")
+	}
+	m.cephfsRoot = value
+	return nil
+}
+
+func (m *Module) setPool(value string) error {
+	if value == "" {
+		return fmt.Errorf("pool must not be empty")
+	}
+	m.pool = value
+	return nil
+}
+
+func (m *Module) setSecret(dst *string, value string) error {
+	if value == "********" {
+		return nil
+	}
+	*dst = value
+	return nil
+}
+
+func (m *Module) setRGWEndpoint(value string) error {
+	if value == "" {
+		return fmt.Errorf("rgw_endpoint must not be empty")
+	}
+	m.rgwEndpoint = value
+	return nil
+}
+
+func (m *Module) setBucket(value string) error {
+	if value == "" {
+		return fmt.Errorf("bucket must not be empty")
+	}
+	m.bucket = value
+	return nil
+}
+
+func (m *Module) setUseSSL(value string) error {
+	b, err := parseBool(value)
+	if err != nil {
+		return err
+	}
+	m.useSSL = b
+	return nil
+}
+
+func (m *Module) setPathStyle(value string) error {
+	b, err := parseBool(value)
+	if err != nil {
+		return err
+	}
+	m.pathStyle = b
 	return nil
 }
