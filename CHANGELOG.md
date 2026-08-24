@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **CephFS backend** (`CEPH_STORAGE_BACKEND=cephfs`, `CEPH_CEPHFS_ROOT`) — POSIX store on mounted CephFS, CGO-free
+- **RADOS backend** (`CEPH_STORAGE_BACKEND=rados`) — native librados with `go build -tags ceph`
+- Admin settings: `storage_backend`, `cephfs_root`; backend factory in `internal/store/open.go`
+
 ### Changed
 
-- Document MinIO as the laptop RGW stand-in; native RADOS/CephFS explicitly deferred
+- Document MinIO as the laptop RGW stand-in
 - Optional MinIO Docker CRUD smoke (`TestMinIO_PutGetListDelete`); skips without Docker
 - `deploy/docker-compose.yml` MinIO fixture for local RGW-compatible testing
 

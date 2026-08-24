@@ -24,14 +24,14 @@ type Config struct {
 	PathStyle bool
 }
 
-// Store implements contracts.StorageProvider (+ Streamable) against Ceph RGW.
-type Store struct {
+// RGWStore implements contracts.StorageProvider (+ Streamable) against Ceph RGW.
+type RGWStore struct {
 	client *minio.Client
 	bucket string
 	prefix string
 }
 
-func New(cfg Config) (*Store, error) {
+func New(cfg Config) (*RGWStore, error) {
 	if cfg.Endpoint == "" {
 		return nil, fmt.Errorf("endpoint is required")
 	}
@@ -56,14 +56,14 @@ func New(cfg Config) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("minio client: %w", err)
 	}
-	return &Store{
+	return &RGWStore{
 		client: client,
 		bucket: cfg.Bucket,
 		prefix: strings.Trim(cfg.Prefix, "/"),
 	}, nil
 }
 
-func (s *Store) key(k string) string {
+func (s *RGWStore) key(k string) string {
 	k = strings.TrimPrefix(k, "/")
 	if s.prefix == "" {
 		return k
@@ -71,12 +71,12 @@ func (s *Store) key(k string) string {
 	return s.prefix + "/" + k
 }
 
-func (s *Store) Health(ctx context.Context) error {
+func (s *RGWStore) Health(ctx context.Context) error {
 	_, err := s.client.BucketExists(ctx, s.bucket)
 	return err
 }
 
-func (s *Store) EnsureBucket(ctx context.Context) error {
+func (s *RGWStore) EnsureBucket(ctx context.Context) error {
 	ok, err := s.client.BucketExists(ctx, s.bucket)
 	if err != nil {
 		return err
@@ -87,13 +87,13 @@ func (s *Store) EnsureBucket(ctx context.Context) error {
 	return s.client.MakeBucket(ctx, s.bucket, minio.MakeBucketOptions{})
 }
 
-func (s *Store) Put(ctx context.Context, key string, data io.Reader, size int64) error {
+func (s *RGWStore) Put(ctx context.Context, key string, data io.Reader, size int64) error {
 	opts := minio.PutObjectOptions{ContentType: "application/octet-stream"}
 	_, err := s.client.PutObject(ctx, s.bucket, s.key(key), data, size, opts)
 	return err
 }
 
-func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+func (s *RGWStore) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	obj, err := s.client.GetObject(ctx, s.bucket, s.key(key), minio.GetObjectOptions{})
 	if err != nil {
 		return nil, mapErr(err)
@@ -105,11 +105,11 @@ func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	return obj, nil
 }
 
-func (s *Store) Delete(ctx context.Context, key string) error {
+func (s *RGWStore) Delete(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucket, s.key(key), minio.RemoveObjectOptions{})
 }
 
-func (s *Store) Move(ctx context.Context, src, dst string) error {
+func (s *RGWStore) Move(ctx context.Context, src, dst string) error {
 	srcKey, dstKey := s.key(src), s.key(dst)
 	_, err := s.client.CopyObject(ctx,
 		minio.CopyDestOptions{Bucket: s.bucket, Object: dstKey},
@@ -121,7 +121,7 @@ func (s *Store) Move(ctx context.Context, src, dst string) error {
 	return s.client.RemoveObject(ctx, s.bucket, srcKey, minio.RemoveObjectOptions{})
 }
 
-func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
+func (s *RGWStore) Exists(ctx context.Context, key string) (bool, error) {
 	_, err := s.client.StatObject(ctx, s.bucket, s.key(key), minio.StatObjectOptions{})
 	if err != nil {
 		if isNotFound(err) {
@@ -132,7 +132,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	return true, nil
 }
 
-func (s *Store) Stat(ctx context.Context, key string) (contracts.ObjectInfo, error) {
+func (s *RGWStore) Stat(ctx context.Context, key string) (contracts.ObjectInfo, error) {
 	info, err := s.client.StatObject(ctx, s.bucket, s.key(key), minio.StatObjectOptions{})
 	if err != nil {
 		return contracts.ObjectInfo{}, mapErr(err)
@@ -147,7 +147,7 @@ func (s *Store) Stat(ctx context.Context, key string) (contracts.ObjectInfo, err
 	}, nil
 }
 
-func (s *Store) List(ctx context.Context, prefix string) ([]contracts.ObjectInfo, error) {
+func (s *RGWStore) List(ctx context.Context, prefix string) ([]contracts.ObjectInfo, error) {
 	full := s.key(prefix)
 	if prefix == "" && s.prefix != "" {
 		full = s.prefix + "/"
@@ -172,7 +172,7 @@ func (s *Store) List(ctx context.Context, prefix string) ([]contracts.ObjectInfo
 }
 
 // Stream implements contracts.Streamable via S3 range GETs.
-func (s *Store) Stream(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
+func (s *RGWStore) Stream(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
 	opts := minio.GetObjectOptions{}
 	switch {
 	case length > 0:
@@ -212,6 +212,7 @@ func isNotFound(err error) bool {
 }
 
 var (
-	_ contracts.StorageProvider = (*Store)(nil)
-	_ contracts.Streamable      = (*Store)(nil)
+	_ Backend                   = (*RGWStore)(nil)
+	_ contracts.StorageProvider = (*RGWStore)(nil)
+	_ contracts.Streamable      = (*RGWStore)(nil)
 )
