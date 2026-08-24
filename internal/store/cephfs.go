@@ -75,14 +75,14 @@ func (s *CephFSStore) Put(ctx context.Context, key string, data io.Reader, _ int
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(filepath.Dir(abs), 0o750); mkdirErr != nil {
+		return mkdirErr
 	}
-	f, err := os.OpenFile(abs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	f, err := os.OpenFile(abs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // abs is canonicalized and confined under root by abs()
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = io.Copy(f, data)
 	return err
 }
@@ -92,7 +92,7 @@ func (s *CephFSStore) Get(ctx context.Context, key string) (io.ReadCloser, error
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(abs)
+	f, err := os.Open(abs) //nolint:gosec // abs is canonicalized and confined under root by abs()
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, contracts.ErrNotFound
@@ -125,7 +125,7 @@ func (s *CephFSStore) Move(ctx context.Context, src, dst string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(dstAbs), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dstAbs), 0o750); err != nil {
 		return err
 	}
 	if err := os.Rename(srcAbs, dstAbs); err != nil {
