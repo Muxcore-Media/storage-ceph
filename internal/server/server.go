@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -33,10 +32,13 @@ func Register(gs *grpc.Server, st store.Backend) *Server {
 	return s
 }
 
-func (s *Server) ReplaceStore(st store.Backend) {
+// SwapStore replaces the active backend under an exclusive lock and returns the previous store.
+func (s *Server) SwapStore(st store.Backend) store.Backend {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	old := s.store
 	s.store = st
-	s.mu.Unlock()
+	return old
 }
 
 func (s *Server) getStore() store.Backend {
@@ -47,35 +49,69 @@ func (s *Server) getStore() store.Backend {
 
 func (s *Server) Put(stream storagev1.StorageService_PutServer) error {
 	st := s.getStore()
-	var (
-		key  string
-		size int64
-		buf  bytes.Buffer
-	)
-	for {
-		msg, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if msg.GetKey() != "" {
-			key = msg.GetKey()
-			size = msg.GetTotalSize()
-		}
-		if chunk := msg.GetChunk(); len(chunk) > 0 {
-			_, _ = buf.Write(chunk)
-		}
+	first, err := stream.Recv()
+	if err != nil {
+		return err
 	}
+	key := first.GetKey()
+	size := first.GetTotalSize()
 	if key == "" {
 		return status.Error(codes.InvalidArgument, "missing key")
 	}
-	if size <= 0 {
-		size = int64(buf.Len())
+
+	pr, pw := io.Pipe()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- st.Put(stream.Context(), key, pr, size)
+	}()
+
+	if chunk := first.GetChunk(); len(chunk) > 0 {
+		if _, werr := pw.Write(chunk); werr != nil {
+			_ = pw.CloseWithError(werr)
+			putErr := <-errCh
+			if putErr != nil {
+				return status.Errorf(codes.Internal, "put: %v", putErr)
+			}
+			return werr
+		}
 	}
-	if err := st.Put(stream.Context(), key, bytes.NewReader(buf.Bytes()), size); err != nil {
+
+	for {
+		msg, recvErr := stream.Recv()
+		if errors.Is(recvErr, io.EOF) {
+			break
+		}
+		if recvErr != nil {
+			_ = pw.CloseWithError(recvErr)
+			<-errCh
+			return recvErr
+		}
+		if chunk := msg.GetChunk(); len(chunk) > 0 {
+			if _, werr := pw.Write(chunk); werr != nil {
+				_ = pw.CloseWithError(werr)
+				putErr := <-errCh
+				if putErr != nil {
+					return status.Errorf(codes.Internal, "put: %v", putErr)
+				}
+				return werr
+			}
+		}
+	}
+	if err := pw.Close(); err != nil {
+		putErr := <-errCh
+		if putErr != nil {
+			return status.Errorf(codes.Internal, "put: %v", putErr)
+		}
+		return err
+	}
+	if err := <-errCh; err != nil {
 		return status.Errorf(codes.Internal, "put: %v", err)
+	}
+	if size <= 0 {
+		info, statErr := st.Stat(stream.Context(), key)
+		if statErr == nil {
+			size = info.Size
+		}
 	}
 	return stream.SendAndClose(&storagev1.PutResponse{Key: key, Size: size})
 }
@@ -171,7 +207,7 @@ func (s *Server) List(ctx context.Context, req *storagev1.ListRequest) (*storage
 	return &storagev1.ListResponse{Objects: out}, nil
 }
 
-func (s *Server) Capabilities(ctx context.Context, _ *storagev1.CapabilitiesRequest) (*storagev1.CapabilitiesResponse, error) {
+func (s *Server) Capabilities(_ context.Context, _ *storagev1.CapabilitiesRequest) (*storagev1.CapabilitiesResponse, error) {
 	return &storagev1.CapabilitiesResponse{Capabilities: []string{"streamable"}}, nil
 }
 

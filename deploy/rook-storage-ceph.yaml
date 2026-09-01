@@ -1,0 +1,85 @@
+# Rook / CephFS deployment sketch for storage-ceph sidecar.
+# Apply after Rook-Ceph is healthy and a CephFS subvolume exists at /muxcore.
+#
+#   kubectl apply -f deploy/rook-storage-ceph.yaml
+#
+# Wire muxcored routing (core storage orchestrator) so keys reach this module
+# instead of in-process storage.local — see README.md "MuxCore routing".
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storage-ceph-keyring
+type: Opaque
+stringData:
+  keyring: |
+    [client.muxcore]
+    key = REPLACE_WITH_CEPH_KEY
+    caps mds = "allow rw path=/muxcore"
+    caps mon = "allow r"
+    caps osd = "allow rw pool=muxcore"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-ceph
+  labels:
+    app: storage-ceph
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage-ceph
+  template:
+    metadata:
+      labels:
+        app: storage-ceph
+    spec:
+      containers:
+        - name: storage-ceph
+          image: ghcr.io/muxcore-media/storage-ceph:0.2.0
+          env:
+            - name: MUXCORE_GRPC_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: muxcore-mesh
+                  key: grpc_addr
+            - name: MUXCORE_MODULE_ID
+              value: storage-ceph
+            - name: CEPH_STORAGE_BACKEND
+              value: cephfs
+            - name: CEPH_CEPHFS_ROOT
+              value: /mnt/cephfs/muxcore
+            - name: CEPH_MONITORS
+              value: rook-ceph-mon-a=10.96.0.1:6789,rook-ceph-mon-b=10.96.0.2:6789
+            - name: CEPH_POOL
+              value: muxcore
+            - name: CEPH_USER
+              value: client.muxcore
+            - name: CEPH_KEYRING
+              value: /etc/ceph/keyring
+            - name: STORAGE_CEPH_GRPC_ADDR
+              value: 127.0.0.1:9680
+            - name: STORAGE_CEPH_HTTP_ADDR
+              value: 127.0.0.1:9681
+          volumeMounts:
+            - name: cephfs-muxcore
+              mountPath: /mnt/cephfs/muxcore
+            - name: ceph-keyring
+              mountPath: /etc/ceph
+              readOnly: true
+          ports:
+            - name: grpc
+              containerPort: 9680
+            - name: health
+              containerPort: 9681
+      volumes:
+        - name: cephfs-muxcore
+          persistentVolumeClaim:
+            claimName: cephfs-muxcore-pvc
+        - name: ceph-keyring
+          secret:
+            secretName: storage-ceph-keyring
+            items:
+              - key: keyring
+                path: keyring

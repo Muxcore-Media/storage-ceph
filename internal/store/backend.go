@@ -12,6 +12,7 @@ type Backend interface {
 	contracts.Streamable
 	Health(ctx context.Context) error
 	EnsureBucket(ctx context.Context) error
+	Close() error
 }
 
 // Store is the default RGW (S3-compatible) backend.

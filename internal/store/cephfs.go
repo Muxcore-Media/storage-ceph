@@ -41,6 +41,8 @@ func NewCephFS(cfg CephFSConfig) (*CephFSStore, error) {
 	}, nil
 }
 
+func (s *CephFSStore) Close() error { return nil }
+
 func (s *CephFSStore) abs(key string) (string, error) {
 	key = strings.TrimPrefix(strings.TrimSpace(key), "/")
 	if key == "" || strings.Contains(key, "..") {
@@ -56,6 +58,35 @@ func (s *CephFSStore) abs(key string) (string, error) {
 		return "", fmt.Errorf("invalid key %q", key)
 	}
 	return abs, nil
+}
+
+func (s *CephFSStore) listBase(prefix string) (string, error) {
+	base := s.root
+	if s.prefix != "" {
+		base = filepath.Join(s.root, filepath.FromSlash(s.prefix))
+	}
+	trim := strings.Trim(prefix, "/")
+	if trim != "" {
+		if strings.Contains(trim, "..") {
+			return "", fmt.Errorf("invalid prefix %q", prefix)
+		}
+		base = filepath.Join(base, filepath.FromSlash(trim))
+	}
+	cleanRoot := filepath.Clean(s.root) + string(os.PathSeparator)
+	if !strings.HasPrefix(base+string(os.PathSeparator), cleanRoot) && base != filepath.Clean(s.root) {
+		return "", fmt.Errorf("invalid prefix %q", prefix)
+	}
+	info, err := os.Stat(base)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return base, nil
+		}
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("prefix %q is not a directory", prefix)
+	}
+	return base, nil
 }
 
 func (s *CephFSStore) Health(ctx context.Context) error {
@@ -176,21 +207,17 @@ func (s *CephFSStore) Stat(ctx context.Context, key string) (contracts.ObjectInf
 }
 
 func (s *CephFSStore) List(ctx context.Context, prefix string) ([]contracts.ObjectInfo, error) {
-	base := s.root
-	if s.prefix != "" {
-		base = filepath.Join(s.root, filepath.FromSlash(s.prefix))
-	}
-	trim := strings.Trim(prefix, "/")
-	if trim != "" {
-		base = filepath.Join(base, filepath.FromSlash(trim))
+	base, err := s.listBase(prefix)
+	if err != nil {
+		return nil, err
 	}
 	var out []contracts.ObjectInfo
-	err := filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if os.IsNotExist(err) {
+	err = filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
 				return nil
 			}
-			return err
+			return walkErr
 		}
 		select {
 		case <-ctx.Done():
@@ -200,17 +227,17 @@ func (s *CephFSStore) List(ctx context.Context, prefix string) ([]contracts.Obje
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(s.root, path)
-		if err != nil {
-			return err
+		rel, relErr := filepath.Rel(s.root, path)
+		if relErr != nil {
+			return relErr
 		}
 		key := filepath.ToSlash(rel)
 		if s.prefix != "" {
 			key = strings.TrimPrefix(key, s.prefix+"/")
 		}
-		info, err := d.Info()
-		if err != nil {
-			return err
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return infoErr
 		}
 		out = append(out, contracts.ObjectInfo{
 			Key:          key,
@@ -237,15 +264,12 @@ func (s *CephFSStore) Stream(ctx context.Context, key string, offset, length int
 			_ = rc.Close()
 			return nil, fmt.Errorf("cephfs stream: cannot seek")
 		}
-		if _, err := seeker.Seek(offset, io.SeekStart); err != nil {
+		if _, seekErr := seeker.Seek(offset, io.SeekStart); seekErr != nil {
 			_ = rc.Close()
-			return nil, err
+			return nil, seekErr
 		}
 	}
-	if length > 0 {
-		return io.NopCloser(io.LimitReader(rc, length)), nil
-	}
-	return rc, nil
+	return limitRC(rc, length), nil
 }
 
 var (
