@@ -1,5 +1,4 @@
-# Local MinIO as Ceph RGW stand-in (laptop).
-# Native RADOS/CephFS is deferred — see README.md.
+# Local MinIO as Ceph RGW stand-in (laptop). CephFS/RADOS paths: README.md, deploy/rook-storage-ceph.yaml.
 #
 #   docker compose -f deploy/docker-compose.yml up -d
 #   export CEPH_RGW_ENDPOINT=127.0.0.1:9000

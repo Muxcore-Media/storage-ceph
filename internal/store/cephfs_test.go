@@ -56,6 +56,57 @@ func TestCephFSPutGetListDelete(t *testing.T) {
 	}
 }
 
+func TestCephFSListRejectsTraversal(t *testing.T) {
+	st := testCephFS(t)
+	ctx := context.Background()
+	if _, err := st.List(ctx, "../"); err == nil {
+		t.Fatal("expected error for ../ prefix")
+	}
+	if _, err := st.List(ctx, "foo/../../etc"); err == nil {
+		t.Fatal("expected error for nested traversal prefix")
+	}
+}
+
+func TestCephFSListRejectsFilePrefix(t *testing.T) {
+	st := testCephFS(t)
+	ctx := context.Background()
+	body := []byte("file-prefix")
+	if err := st.Put(ctx, "leaf.txt", bytes.NewReader(body), int64(len(body))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.List(ctx, "leaf.txt"); err == nil {
+		t.Fatal("expected error when prefix is a file")
+	}
+}
+
+func TestCephFSStreamCloseReleasesFD(t *testing.T) {
+	st := testCephFS(t)
+	ctx := context.Background()
+	body := []byte("0123456789abcdef")
+	if err := st.Put(ctx, "stream.bin", bytes.NewReader(body), int64(len(body))); err != nil {
+		t.Fatal(err)
+	}
+	rc, err := st.Stream(ctx, "stream.bin", 2, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "2345" {
+		t.Fatalf("range=%q", got)
+	}
+	if err := rc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	rc2, err := st.Stream(ctx, "stream.bin", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = rc2.Close()
+}
+
 func TestOpenBackends(t *testing.T) {
 	root := t.TempDir()
 	fs, err := Open(ModuleConfig{Backend: "cephfs", CephFSRoot: root})

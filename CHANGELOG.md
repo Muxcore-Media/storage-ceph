@@ -1,24 +1,27 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] — 2026-08-31
 
 ### Added
 
-- **CephFS backend** (`CEPH_STORAGE_BACKEND=cephfs`, `CEPH_CEPHFS_ROOT`) — POSIX store on mounted CephFS, CGO-free
-- **RADOS backend** (`CEPH_STORAGE_BACKEND=rados`) — native librados with `go build -tags ceph`
-- Admin settings: `storage_backend`, `cephfs_root`; backend factory in `internal/store/open.go`
+- **CephFS backend** path confinement on `List`; stream `Close` fixes
+- **RADOS backend** chunked Put/Get/Stream via `radosIO` interface; `make build-ceph`
+- Admin `storage_backend` select (`rgw|cephfs|rados`); RGW TLS CA + optional mTLS client cert settings
+- Keyring path validation for `backend=rados`; generic `/health` 503 body
+- Streaming gRPC `Put` (no full-object buffer); `Backend.Close()` on stop/settings swap with rollback
+- `deploy/rook-storage-ceph.yaml`; Forgejo CI sibling checkout + golangci-lint + race tests
+- Module/server tests (capabilities, secret masking, dial smoke, large Put streaming)
 
 ### Changed
 
-- Document MinIO as the laptop RGW stand-in
-- Optional MinIO Docker CRUD smoke (`TestMinIO_PutGetListDelete`); skips without Docker
-- `deploy/docker-compose.yml` MinIO fixture for local RGW-compatible testing
+- Version 0.2.0; default bind `127.0.0.1:9680` / `127.0.0.1:9681`
+- Docs: `MVP_ENABLE_STORAGE_CEPH`, routing policy vs `storage.local`, all three backends
 
 ## [0.1.0] — 2026-08-10
 
 ### Added
 
 - Ceph RGW (S3-compatible) `StorageProvider` + `Streamable`
-- gRPC `StorageService` sidecar (`:9680`) + health (`:9681`)
-- SettingsProvider for Rook/Ceph + RGW connection knobs
+- gRPC `StorageService` sidecar + health HTTP
+- SettingsProvider for RGW connection knobs
 - Unit tests via gofakes3

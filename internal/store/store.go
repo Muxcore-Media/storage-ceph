@@ -2,8 +2,12 @@ package store
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
+	"net/http"
+	"os"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
@@ -14,14 +18,17 @@ import (
 
 // Config holds Ceph RGW (S3-compatible) connection settings.
 type Config struct {
-	Endpoint  string
-	Bucket    string
-	Region    string
-	AccessKey string
-	SecretKey string
-	Prefix    string
-	UseSSL    bool
-	PathStyle bool
+	Endpoint   string
+	Bucket     string
+	Region     string
+	AccessKey  string
+	SecretKey  string
+	Prefix     string
+	UseSSL     bool
+	PathStyle  bool
+	CAFile     string
+	ClientCert string
+	ClientKey  string
 }
 
 // RGWStore implements contracts.StorageProvider (+ Streamable) against Ceph RGW.
@@ -52,6 +59,14 @@ func New(cfg Config) (*RGWStore, error) {
 		opts.BucketLookup = minio.BucketLookupPath
 	}
 
+	if cfg.UseSSL && cfg.CAFile != "" {
+		transport, err := tlsTransport(cfg)
+		if err != nil {
+			return nil, err
+		}
+		opts.Transport = transport
+	}
+
 	client, err := minio.New(endpoint, opts)
 	if err != nil {
 		return nil, fmt.Errorf("minio client: %w", err)
@@ -62,6 +77,30 @@ func New(cfg Config) (*RGWStore, error) {
 		prefix: strings.Trim(cfg.Prefix, "/"),
 	}, nil
 }
+
+func tlsTransport(cfg Config) (*http.Transport, error) {
+	caPEM, err := os.ReadFile(cfg.CAFile)
+	if err != nil {
+		return nil, fmt.Errorf("rgw ca %q: %w", cfg.CAFile, err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("rgw ca %q: no certificates", cfg.CAFile)
+	}
+	tlsCfg := &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	if cfg.ClientCert != "" && cfg.ClientKey != "" {
+		cert, certErr := tls.LoadX509KeyPair(cfg.ClientCert, cfg.ClientKey)
+		if certErr != nil {
+			return nil, fmt.Errorf("rgw client cert: %w", certErr)
+		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = tlsCfg
+	return transport, nil
+}
+
+func (s *RGWStore) Close() error { return nil }
 
 func (s *RGWStore) key(k string) string {
 	k = strings.TrimPrefix(k, "/")
