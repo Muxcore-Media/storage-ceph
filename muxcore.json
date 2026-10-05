@@ -1,10 +1,17 @@
 {
   "name": "Storage Ceph",
   "description": "Ceph storage sidecar — RGW (S3), CephFS mount, or native RADOS",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "author": "MuxCore",
-  "roles": ["storage", "infrastructure"],
-  "capabilities": ["storage", "storage.ceph", "settings"],
+  "roles": [
+    "storage",
+    "infrastructure"
+  ],
+  "capabilities": [
+    "storage",
+    "storage.ceph",
+    "settings"
+  ],
   "contracts": [
     {
       "repo": "github.com/Muxcore-Media/core/pkg/contracts",

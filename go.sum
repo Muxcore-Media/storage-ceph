@@ -1,9 +1,9 @@
-github.com/Muxcore-Media/core v0.6.0 h1:hbE+l4de+xEiKLvLn3EgjKXEE57n98+Vvyzi8J1dQp4=
-github.com/Muxcore-Media/core v0.6.0/go.mod h1:lZ6tuCEjwmXI0zd6lhKOkm/qpB1Js4rrB+Bs9lCNZjA=
+github.com/Muxcore-Media/core v0.6.12 h1:IsXr8TaSLlMJIzILxCpWssTbuBvTX4KoiqTMypRpq9o=
+github.com/Muxcore-Media/core v0.6.12/go.mod h1:lZ6tuCEjwmXI0zd6lhKOkm/qpB1Js4rrB+Bs9lCNZjA=
 github.com/Muxcore-Media/core/pkg/contracts v0.6.0 h1:NNaPjtDT81ESDDSMiEk2LGn6XsIFz+pKhXrr1TeSH+0=
 github.com/Muxcore-Media/core/pkg/contracts v0.6.0/go.mod h1:riu1DrsCAJ9AJf9uf8IG1W8nYzcQ+Y7HiT6okz7Lmck=
-github.com/Muxcore-Media/core/sdk/go/module v0.6.0 h1:yCQVyDVgTWyxXggYaCPkpS2BhPtE3QhWseOLosqFdAg=
-github.com/Muxcore-Media/core/sdk/go/module v0.6.0/go.mod h1:Sm2YC2uxsc54IYeWpNMCeVT78Egzlg8HQLwjQKLvzoM=
+github.com/Muxcore-Media/core/sdk/go/module v0.6.3 h1:ntrr/pqHVy68mKR1FiccxkI4AVlafvCSxP+Kfin7RtA=
+github.com/Muxcore-Media/core/sdk/go/module v0.6.3/go.mod h1:iKKRbT+FVGrn0RMWFOAvAzG6D8JqQJr//qZbkyaJUGQ=
 github.com/aws/aws-sdk-go-v2 v1.43.2 h1:cl+IXwWb3qazClUcm08tGSsB6OiuV83JVJO9B0jQcPc=
 github.com/aws/aws-sdk-go-v2 v1.43.2/go.mod h1:WEzLKBh/mEjXvx1FtQMWgSxMSTVqxQzjkRtk5fa3wkg=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.15 h1:rq/p1VNFfygoKEQ9hHMKsKBE98lspPvT8IxaFs5mFhw=

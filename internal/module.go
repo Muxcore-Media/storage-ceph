@@ -16,11 +16,10 @@ import (
 
 	"github.com/Muxcore-Media/core/pkg/contracts"
 	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
+	manifest "github.com/Muxcore-Media/storage-ceph"
 	"github.com/Muxcore-Media/storage-ceph/internal/server"
 	"github.com/Muxcore-Media/storage-ceph/internal/store"
 )
-
-const moduleVersion = "0.2.0"
 
 // Module is a Ceph storage provider (RGW, CephFS mount, or native RADOS with -tags ceph).
 // Laptop path: point CEPH_RGW_* at MinIO (see README / deploy/docker-compose.yml).
@@ -197,7 +196,7 @@ func (m *Module) Info() contracts.ModuleInfo {
 	return contracts.ModuleInfo{
 		ID:           m.id,
 		Name:         "Storage Ceph",
-		Version:      moduleVersion,
+		Version:      modulesdk.ManifestVersion(manifest.ManifestJSON),
 		Roles:        []string{"storage", "infrastructure"},
 		Description:  "Ceph storage sidecar — RGW (S3), CephFS mount, or native RADOS",
 		Author:       "MuxCore",
