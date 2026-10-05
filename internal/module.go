@@ -25,31 +25,31 @@ const moduleVersion = "0.2.0"
 // Module is a Ceph storage provider (RGW, CephFS mount, or native RADOS with -tags ceph).
 // Laptop path: point CEPH_RGW_* at MinIO (see README / deploy/docker-compose.yml).
 type Module struct { //nolint:govet // fieldalignment: lifecycle fields grouped for readability
-	id          string
-	grpcAddr    string
-	httpAddr    string
-	backend     string
-	cephfsRoot  string
-	monitors    string
-	pool        string
-	user        string
-	keyring     string
-	rgwEndpoint string
-	bucket      string
-	accessKey   string
-	secretKey   string
-	prefix      string
-	rgwCA       string
+	id            string
+	grpcAddr      string
+	httpAddr      string
+	backend       string
+	cephfsRoot    string
+	monitors      string
+	pool          string
+	user          string
+	keyring       string
+	rgwEndpoint   string
+	bucket        string
+	accessKey     string
+	secretKey     string
+	prefix        string
+	rgwCA         string
 	rgwClientCert string
 	rgwClientKey  string
-	cfgMu       sync.RWMutex
-	store       store.Backend
-	srv         *server.Server
-	grpcSrv     *grpc.Server
-	lis         net.Listener
-	httpSrv     *http.Server
-	useSSL      bool
-	pathStyle   bool
+	cfgMu         sync.RWMutex
+	store         store.Backend
+	srv           *server.Server
+	grpcSrv       *grpc.Server
+	lis           net.Listener
+	httpSrv       *http.Server
+	useSSL        bool
+	pathStyle     bool
 }
 
 type Config struct { //nolint:govet // fieldalignment: config fields grouped for readability

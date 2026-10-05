@@ -3,8 +3,10 @@ package store
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 
@@ -35,13 +37,21 @@ type radosIO interface {
 }
 
 type radosStore struct {
-	mu     sync.Mutex
 	io     radosIO
 	prefix string
+	mu     sync.Mutex
 }
 
-func newRADOSStore(io radosIO, prefix string) *radosStore {
-	return &radosStore{io: io, prefix: strings.Trim(prefix, "/")}
+// sizeToInt64 converts a RADOS object size to int64, clamping at MaxInt64.
+func sizeToInt64(n uint64) int64 {
+	if n > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(n)
+}
+
+func newRADOSStore(rio radosIO, prefix string) *radosStore {
+	return &radosStore{io: rio, prefix: strings.Trim(prefix, "/")}
 }
 
 func (s *radosStore) Close() error {
@@ -142,7 +152,7 @@ func (s *radosStore) Exists(ctx context.Context, key string) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if err == contracts.ErrNotFound {
+	if errors.Is(err, contracts.ErrNotFound) {
 		return false, nil
 	}
 	return false, err
@@ -155,14 +165,14 @@ func (s *radosStore) Stat(_ context.Context, key string) (contracts.ObjectInfo, 
 	}
 	stat, err := ioctx.Stat(s.objKey(key))
 	if err != nil {
-		if err == contracts.ErrNotFound {
+		if errors.Is(err, contracts.ErrNotFound) {
 			return contracts.ObjectInfo{}, contracts.ErrNotFound
 		}
 		return contracts.ObjectInfo{}, err
 	}
 	return contracts.ObjectInfo{
 		Key:         key,
-		Size:        int64(stat.Size),
+		Size:        sizeToInt64(stat.Size),
 		ContentType: "application/octet-stream",
 	}, nil
 }
@@ -199,7 +209,7 @@ func (s *radosStore) List(ctx context.Context, prefix string) ([]contracts.Objec
 		}
 		out = append(out, contracts.ObjectInfo{
 			Key:  key,
-			Size: int64(stat.Size),
+			Size: sizeToInt64(stat.Size),
 		})
 	}
 	return out, iter.Err()
@@ -210,28 +220,32 @@ func (s *radosStore) Stream(_ context.Context, key string, offset, length int64)
 	if err != nil {
 		return nil, err
 	}
+	if offset < 0 {
+		return nil, fmt.Errorf("rados stream: negative offset %d", offset)
+	}
 	obj := s.objKey(key)
 	stat, err := ioctx.Stat(obj)
 	if err != nil {
-		if err == contracts.ErrNotFound {
+		if errors.Is(err, contracts.ErrNotFound) {
 			return nil, contracts.ErrNotFound
 		}
 		return nil, err
 	}
+	off := uint64(offset) // offset >= 0 checked above
 	end := stat.Size
 	if length > 0 {
-		end = uint64(offset) + uint64(length)
-		if end > stat.Size {
-			end = stat.Size
+		// Clamp rather than add, so a huge length cannot overflow uint64.
+		if remaining := stat.Size - min(off, stat.Size); uint64(length) < remaining {
+			end = off + uint64(length)
 		}
 	}
-	if uint64(offset) >= stat.Size {
+	if off >= stat.Size {
 		return io.NopCloser(bytes.NewReader(nil)), nil
 	}
 	return &radosStreamReader{
 		io:     ioctx,
 		key:    obj,
-		offset: uint64(offset),
+		offset: off,
 		end:    end,
 	}, nil
 }
@@ -239,9 +253,9 @@ func (s *radosStore) Stream(_ context.Context, key string, offset, length int64)
 type radosStreamReader struct {
 	io     radosIO
 	key    string
+	buf    []byte
 	offset uint64
 	end    uint64
-	buf    []byte
 	bufOff int
 	closed bool
 }
@@ -254,11 +268,11 @@ func (r *radosStreamReader) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 	if len(r.buf) == 0 || r.bufOff >= len(r.buf) {
-		chunk := radosChunkSize
-		if remain := r.end - r.offset; remain < uint64(chunk) {
-			chunk = int(remain)
+		chunk := uint64(radosChunkSize)
+		if remain := r.end - r.offset; remain < chunk {
+			chunk = remain
 		}
-		b, err := r.io.Read(r.key, r.offset, uint64(chunk))
+		b, err := r.io.Read(r.key, r.offset, chunk)
 		if err != nil {
 			return 0, err
 		}
@@ -267,7 +281,7 @@ func (r *radosStreamReader) Read(p []byte) (int, error) {
 	}
 	n := copy(p, r.buf[r.bufOff:])
 	r.bufOff += n
-	r.offset += uint64(n)
+	r.offset += uint64(n) //nolint:gosec // n comes from copy(), never negative
 	if r.offset >= r.end {
 		if n < len(p) {
 			return n, io.EOF
