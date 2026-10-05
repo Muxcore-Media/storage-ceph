@@ -30,9 +30,9 @@ func TestModuleInfo_StorageCapability(t *testing.T) {
 
 func TestSettings_MaskSecrets(t *testing.T) {
 	m := NewModule(Config{
-		AccessKey: "ak",
-		SecretKey: "sk",
-		Keyring:   "/etc/ceph/keyring",
+		AccessKey:   "ak",
+		SecretKey:   "sk",
+		Keyring:     "/etc/ceph/keyring",
 		RGWEndpoint: "127.0.0.1:9000",
 		Bucket:      "muxcore",
 	})

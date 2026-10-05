@@ -17,7 +17,7 @@ import (
 )
 
 // Config holds Ceph RGW (S3-compatible) connection settings.
-type Config struct {
+type Config struct { //nolint:govet // exported config; field order kept grouped for readability, not reordered for alignment
 	Endpoint   string
 	Bucket     string
 	Region     string
@@ -95,7 +95,12 @@ func tlsTransport(cfg Config) (*http.Transport, error) {
 		}
 		tlsCfg.Certificates = []tls.Certificate{cert}
 	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	var transport *http.Transport
+	if dt, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = dt.Clone()
+	} else {
+		transport = &http.Transport{Proxy: http.ProxyFromEnvironment}
+	}
 	transport.TLSClientConfig = tlsCfg
 	return transport, nil
 }
