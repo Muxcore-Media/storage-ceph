@@ -1,8 +1,9 @@
 # Local MinIO as Ceph RGW stand-in (laptop). CephFS/RADOS paths: README.md, deploy/rook-storage-ceph.yaml.
 #
+#   export MINIO_ROOT_USER="muxcore-$(openssl rand -hex 4)" MINIO_ROOT_PASSWORD="$(openssl rand -hex 16)"  # required; no default
 #   docker compose -f deploy/docker-compose.yml up -d
 #   export CEPH_RGW_ENDPOINT=127.0.0.1:9000
-#   export CEPH_ACCESS_KEY=minioadmin CEPH_SECRET_KEY=minioadmin
+#   export CEPH_ACCESS_KEY="$MINIO_ROOT_USER" CEPH_SECRET_KEY="$MINIO_ROOT_PASSWORD"
 #   export CEPH_BUCKET=muxcore CEPH_PATH_STYLE=true CEPH_USE_SSL=false
 
 services:
@@ -10,8 +11,8 @@ services:
     image: minio/minio:latest
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
     ports:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"

@@ -46,8 +46,8 @@ MVP stack:
 MVP_ENABLE_STORAGE_CEPH=1
 CEPH_RGW_ENDPOINT=127.0.0.1:9000
 CEPH_BUCKET=muxcore
-CEPH_ACCESS_KEY=minioadmin
-CEPH_SECRET_KEY=minioadmin
+CEPH_ACCESS_KEY=<your RGW/MinIO access key>
+CEPH_SECRET_KEY=<your RGW/MinIO secret key>   # e.g. openssl rand -hex 16
 ```
 
 Then add a routing policy (admin API / muxcore config) so Put/Get dial `storage-ceph` instead of `storage.local`.
@@ -59,12 +59,14 @@ Kubernetes / Rook: see [`deploy/rook-storage-ceph.yaml`](deploy/rook-storage-cep
 On a laptop you do **not** need a Ceph cluster. Point this module at **local MinIO** the same way you would at Ceph RGW (path-style S3).
 
 ```bash
+# MinIO credentials are required (no default); generate them first:
+export MINIO_ROOT_USER="muxcore-$(openssl rand -hex 4)" MINIO_ROOT_PASSWORD="$(openssl rand -hex 16)"
 docker compose -f deploy/docker-compose.yml up -d
 
 export CEPH_RGW_ENDPOINT=127.0.0.1:9000
 export CEPH_BUCKET=muxcore
-export CEPH_ACCESS_KEY=minioadmin
-export CEPH_SECRET_KEY=minioadmin
+export CEPH_ACCESS_KEY="$MINIO_ROOT_USER"
+export CEPH_SECRET_KEY="$MINIO_ROOT_PASSWORD"
 export CEPH_PATH_STYLE=true
 export CEPH_USE_SSL=false
 export STORAGE_CEPH_GRPC_ADDR=127.0.0.1:9680
