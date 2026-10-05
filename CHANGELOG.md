@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.0] - 2026-10-05
+
+### Changed
+- CI runs on GitHub-hosted runners from the umbrella template; retired-origin workflows removed.
+- Dependencies resolve from published GitHub tags (no filesystem `replace`); requires core v0.6.0.
+
 ## [0.2.0] — 2026-08-31
 
 ### Added
@@ -9,7 +15,7 @@
 - Admin `storage_backend` select (`rgw|cephfs|rados`); RGW TLS CA + optional mTLS client cert settings
 - Keyring path validation for `backend=rados`; generic `/health` 503 body
 - Streaming gRPC `Put` (no full-object buffer); `Backend.Close()` on stop/settings swap with rollback
-- `deploy/rook-storage-ceph.yaml`; Forgejo CI sibling checkout + golangci-lint + race tests
+- `deploy/rook-storage-ceph.yaml`; CI sibling checkout + golangci-lint + race tests
 - Module/server tests (capabilities, secret masking, dial smoke, large Put streaming)
 
 ### Changed
