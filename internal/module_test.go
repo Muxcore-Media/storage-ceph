@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	modulesdk "github.com/Muxcore-Media/core/sdk/go/module"
+	manifest "github.com/Muxcore-Media/storage-ceph"
 )
 
 func TestModuleInfo_StorageCapability(t *testing.T) {
@@ -12,7 +13,7 @@ func TestModuleInfo_StorageCapability(t *testing.T) {
 	if info.ID != "storage-ceph" {
 		t.Fatalf("ID=%q", info.ID)
 	}
-	if info.Version != moduleVersion {
+	if info.Version != modulesdk.ManifestVersion(manifest.ManifestJSON) {
 		t.Fatalf("Version=%q", info.Version)
 	}
 	want := map[string]bool{"storage": false, "storage.ceph": false, "settings": false}
